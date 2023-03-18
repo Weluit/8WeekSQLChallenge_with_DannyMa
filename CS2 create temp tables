@@ -1,0 +1,72 @@
+drop table if exists customer_orders_mod;
+create temporary table customer_orders_mod select order_id, customer_id, pizza_id, case 
+when exclusions = 'null' then NULL
+when exclusions = '' then NULL
+else exclusions end as exclusions_cleaned, 
+case when extras = 'null' then NULL 
+when extras = '' then NULL 
+else extras end as extras_cleaned, order_time from customer_orders;
+
+select * from customer_orders_mod;
+
+DROP TABLE IF EXISTS runner_orders_mod;
+CREATE TABLE runner_orders_mod (
+  order_id INTEGER,
+  runner_id INTEGER,
+  pickup_time datetime,
+  distance float,
+  duration VARCHAR(10),
+  cancellation VARCHAR(23)
+);
+
+INSERT INTO runner_orders_mod
+  (order_id, runner_id, pickup_time, distance, duration, cancellation)
+VALUES
+  ('1', '1', '2020-01-01 18:15:34', '20', '32', NULL),
+  ('2', '1', '2020-01-01 19:10:54', '20', '27', NULL),
+  ('3', '1', '2020-01-03 00:12:37', '13.4', '20', NULL),
+  ('4', '2', '2020-01-04 13:53:03', '23.4', '40', NULL),
+  ('5', '3', '2020-01-08 21:10:57', '10', '15', NULL),
+  ('6', '3', NULL, NULL, NULL, 'Restaurant Cancellation'),
+  ('7', '2', '2020-01-08 21:30:45', '25', '25', NULL),
+  ('8', '2', '2020-01-10 00:15:02', '23.4', '15', NULL),
+  ('9', '2', NULL, NULL, NULL, 'Customer Cancellation'),
+  ('10', '1', '2020-01-11 18:50:20', '10', '10', NULL);
+select * from runner_orders_mod;
+
+
+
+DROP TABLE if exists row_split_pizza_recipes_temp;
+
+CREATE TEMPORARY TABLE row_split_pizza_recipes_temp AS
+SELECT t.pizza_id,
+       trim(j.topping) AS topping_id
+FROM pizza_recipes t
+JOIN json_table(trim(replace(json_array(t.toppings), ',', '","')),
+                '$[*]' columns (topping varchar(50) PATH '$')) j ;
+                
+SELECT *
+FROM row_split_pizza_recipes_temp;
+
+
+DROP TABLE if exists row_split_customer_orders_temp;
+
+CREATE TEMPORARY TABLE row_split_customer_orders_temp AS
+SELECT t.row_num,
+       t.order_id,
+       t.customer_id,
+       t.pizza_id,
+       trim(j1.exclusions_cleaned) AS exclusions,
+       trim(j2.extras_cleaned) AS extras,
+       t.order_time
+FROM
+  (SELECT *,
+          row_number() over() AS row_num
+   FROM customer_orders_mod) t
+INNER JOIN json_table(trim(replace(json_array(t.exclusions_cleaned), ',', '","')),
+                      '$[*]' columns (exclusions_cleaned varchar(50) PATH '$')) j1
+INNER JOIN json_table(trim(replace(json_array(t.extras_cleaned), ',', '","')),
+                      '$[*]' columns (extras_cleaned varchar(50) PATH '$')) j2 ;
+
+SELECT *
+FROM row_split_customer_orders_temp;
